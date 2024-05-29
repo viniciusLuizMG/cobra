@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake Game</title>
+
+<style>
+    /* Estilos CSS para o jogo */
+    canvas {
+        border: 1px solid #000;
+        display: block;
+        margin: 0 auto;
+    }
+
+    #startButtonStartScreen, #startButton, #pauseButton, #score, #timer, #difficultyContainer {
+        display: block;
+        margin: 20px auto;
+    }
+
+    #startButtonStartScreen {
+        padding: 20px 40px;
+        font-size: 24px;
+        background-color: #333;
+        color: #fff;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    #startButton, #pauseButton {
+        padding: 10px 20px;
+        font-size: 18px;
+        background-color: #333;
+        color: #fff;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    #score, #timer {
+        text-align: center;
+        font-size: 24px;
+        background-color: #333;
+        color: #fff;
+        padding: 10px;
+        border-radius: 50px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        width: 30vw;
+        height: 3vh;
+    }
+
+    .victory-message, .defeat-message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        font-size: 24px;
+        z-index: 9999;
+    }
+
+    .defeat-message {
+        background-color: rgba(255, 0, 0, 0.8); /* Vermelho para derrota */
+    }
+
+    
+    /* Estilos para a tela inicial */
+    #startScreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+   
+    #difficulty{
+        padding: 10px 20px;
+        font-size: 18px;
+        background-color: #333;
+        color: #fff;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+</style>
+
+</head>
+<body>
+
+    <div id="startScreen">
+        <button id="startButtonStartScreen">Iniciar Jogo</button>
+        <div id="difficultyContainer">
+
+            <label for="difficulty" style="color: #fff;"> >Escolha a dificuldade:</label>
+            <select id="difficulty">
+                <option value="easy">Fácil</option>
+                <option value="hard">Difícil</option>
+            </select>
+        </div>
+    </div>
+    
+
+<!-- Elementos HTML para exibir placar, tempo, canvas do jogo e botões de iniciar e pausar -->
+<div id="score">Placar: 0</div>
+<div id="timer">Tempo: 0:00</div>
+
+<canvas id="gameCanvas" width="600" height="600"></canvas>
+<button id="startButton">Iniciar</button>
+<button id="pauseButton">Pausar</button>
+
+<!-- Elemento HTML para reproduzir o som de comer -->
+<audio id="eatSound">
+    <source src="./musicas/efeitoSonoro.mp4" type="audio/mp4">
+    Your browser does not support the audio element.
+</audio>
+
+<!-- Elemento HTML para reproduzir a música de vitória -->
+<audio id="victoryMusic">
+    <source src="./musicas/musica_vitória.mp4" type="audio/mp3">
+    Your browser does not support the audio element.
+</audio>
+
+<!-- Elemento HTML para reproduzir a música de derrota -->
+<audio id="defeatMusic">
+    <source src="./musicas/efeto_derrota.mp4" type="audio/mp3">
+    Your browser does not support the audio element.
+</audio>
+
+
+<script>
+    // Obtenção do contexto do canvas e definição de variáveis globais
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const box = 20;
+    const canvasSize = canvas.width;
+    const snake = [{ x: 10 * box, y: 10 * box }];
+    let food = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+    let direction = 'right';
+    let changingDirection = false;
+    let gameRunning = false;
+    let paused = false;
+    let intervalId;
+    let score = 0;
+    let seconds = 0;
+    let minutes = 0;
+
+    // Obtenção de referências para elementos HTML relevantes
+    const scoreElement = document.getElementById('score');
+    const timerElement = document.getElementById('timer');
+    const startButtonStartScreen = document.getElementById('startButtonStartScreen');
+    const startButton = document.getElementById('startButton');
+    const pauseButton = document.getElementById('pauseButton');
+    const eatSound = document.getElementById('eatSound');
+    const victoryMusic = document.getElementById('victoryMusic');
+    const defeatMusic = document.getElementById('defeatMusic');
+    const difficultySelect = document.getElementById('difficulty');
+    const difficultyContainer = document.getElementById('difficultyContainer');
+
+    
+    // Adicionar eventos de clique aos botões de iniciar e pausar o jogo
+    startButtonStartScreen.addEventListener('click', () => {
+        startScreen.style.display = 'none'; // Esconde a tela inicial
+        difficultyContainer.style.display = 'none'; // Esconde o seletor de dificuldade
+        startGame(); // Inicia o jogo
+
+        // Exibir os elementos HTML relevantes ao iniciar o jogo
+        scoreElement.style.display = 'block';
+        timerElement.style.display = 'block';
+        pauseButton.style.display = 'block';
+    });
+
+    startButton.addEventListener('click', startGame);
+    pauseButton.addEventListener('click', togglePause);
+
+    // Função para iniciar o jogo
+    function startGame() {
+        if (!gameRunning) {
+            gameRunning = true;
+            const difficulty = difficultySelect.value; // Obtém a dificuldade selecionada
+            const speed = (difficulty === 'easy') ? 320 : 100; // Ajusta a velocidade com base na dificuldade selecionada
+            intervalId = setInterval(() => {
+                if (!paused) {
+                    draw(); // Chama a função para desenhar os elementos do jogo apenas se não estiver pausado
+                    updateTime(); // Atualiza o tempo do jogo
+                }
+            }, speed);
+        }
+    }
+
+    // Função para pausar e despausar o jogo
+    function togglePause() {
+        paused = !paused;
+        pauseButton.textContent = paused ? 'Despausar' : 'Pausar';
+    }
+
+
+   // Adicionar evento de tecla pressionada para mudar a direção da cobrinha e pausar o jogo
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'p' || event.key === 'P') {
+        togglePause();
+    } else {
+        changeDirection(event);
+    }
+});
+
+// Função para mudar a direção da cobrinha
+function changeDirection(event) {
+    if (!changingDirection) {
+        changingDirection = true;
+        setTimeout(() => {
+            if ((event.keyCode === 37 || event.key === 'a' || event.key === 'A') && direction !== 'right') direction = 'left';
+            else if ((event.keyCode === 38 || event.key === 'w' || event.key === 'W') && direction !== 'down') direction = 'up';
+            else if ((event.keyCode === 39 || event.key === 'd' || event.key === 'D') && direction !== 'left') direction = 'right';
+            else if ((event.keyCode === 40 || event.key === 's' || event.key === 'S') && direction !== 'up') direction = 'down';
+            changingDirection = false;
+        }, 100);
+    }
+}
+
+    // Função para desenhar os elementos do jogo
+    function draw() {
+        ctx.clearRect(0, 0, canvasSize, canvasSize); // Limpa o canvas
+        drawGrid(); // Desenha a grade do jogo
+        drawSnake(); // Desenha a cobrinha
+        drawFood(); // Desenha a comida
+        moveSnake(); // Move a cobrinha
+        checkCollision(); // Verifica colisões
+        updateScore(); // Atualiza o placar
+    }
+
+    // Função para desenhar a grade do jogo
+    function drawGrid() {
+        ctx.strokeStyle = "#ddd";
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= canvasSize; x += box) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvasSize);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= canvasSize; y += box) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvasSize, y);
+            ctx.stroke();
+        }
+    }
+
+    // Função para desenhar a cobrinha
+    function drawSnake() {
+        ctx.fillStyle = 'green';
+        snake.forEach(segment => {
+            ctx.fillRect(segment.x, segment.y, box, box);
+        });
+    }
+
+    // Função para desenhar a comida
+    function drawFood() {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(food.x, food.y, box, box);
+    }
+
+    // Função para mover a cobrinha
+    function moveSnake() {
+        const head = { x: snake[0].x, y: snake[0].y };
+
+        if (direction === 'right') head.x += box;
+        else if (direction === 'left') head.x -= box;
+        else if (direction === 'up') head.y -= box;
+        else if (direction === 'down') head.y += box;
+
+        snake.unshift(head);
+
+        if (head.x === food.x && head.y === food.y) {
+            food = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+            score++;
+            eatSound.currentTime = 0; // Reseta a reprodução do som para poder ser tocado várias vezes seguidas
+            eatSound.play(); // Toca o som de comer
+            
+            if (score >= 15) { // Nº max. de pontos do jogo !!!"!"!!!
+
+                gameOver(true); // Chama a função de fim do jogo com vitória
+            }
+        } else {
+            snake.pop();
+        }
+    }
+
+    // Função para verificar colisões
+    function checkCollision() {
+        if (snake[0].x < 0 || snake[0].x >= canvasSize || snake[0].y < 0 || snake[0].y >= canvasSize) {
+            gameOver(false); // Chama a função de fim do jogo sem vitória
+        }
+
+        for (let i = 1; i < snake.length; i++) {
+            if (snake[0].x === snake[i].x && snake[0].y === snake[i].y) {
+                gameOver(false); // Chama a função de fim do jogo sem vitória
+            }
+        }
+    }
+
+    // Função para remover a mensagem da tela
+    function removeMessage(messageClass) {
+        const message = document.querySelector('.' + messageClass);
+        if (message) {
+            message.remove();
+        }
+    }
+
+    // Função para lidar com o fim do jogo
+    function gameOver(victory) {
+        clearInterval(intervalId);
+        gameRunning = false;
+        if (victory) {
+            victoryMusic.play(); // Toca a música de vitória
+            const victoryMessage = document.createElement('div');
+            victoryMessage.textContent = 'Parabéns! Você venceu com um placar de ' + score + ' pontos e o tempo decorrido foi: ' + minutes + ' minutos e ' + seconds + ' segundos.';
+            victoryMessage.classList.add('victory-message'); // Adiciona a classe para estilo de vitória
+            document.body.appendChild(victoryMessage);
+            setTimeout(() => removeMessage('victory-message'), 5000); // Remove a mensagem de vitória após 5 segundos
+        } else {
+            defeatMusic.play(); // Toca a música de derrota
+            const defeatMessage = document.createElement('div');
+            defeatMessage.textContent = 'Game Over! Seu placar foi: ' + score + ' e o tempo decorrido foi: ' + minutes + ' minutos e ' + seconds + ' segundos.';
+            defeatMessage.classList.add('defeat-message'); // Adiciona a classe para estilo de derrota
+            document.body.appendChild(defeatMessage);
+            setTimeout(() => removeMessage('defeat-message'), 5000); // Remove a mensagem de derrota após 5 segundos
+        }
+        snake.length = 1;
+        snake[0] = { x: 10 * box, y: 10 * box };
+        direction = 'right';
+        food = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+        score = 0;
+        seconds = 0;
+        minutes = 0;
+        updateScore();
+        updateTime();
+    }
+
+    // Função para atualizar o placar
+    function updateScore() {
+        scoreElement.textContent = 'Placar: ' + score;
+    }
+
+    // Função para atualizar o tempo
+    function updateTime() {
+        seconds++;
+        if (seconds >= 60) {
+            seconds = 0;
+            minutes++;
+        }
+        timerElement.textContent = 'Tempo: ' + minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+    }
+
+</script>
+
+</body>
+</html>
